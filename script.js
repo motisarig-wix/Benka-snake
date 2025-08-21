@@ -124,31 +124,53 @@ function beep(freq = 640, dur = 0.08, gainValue = 0.08) { resumeAudioContext(); 
 
 const exts = ['m4a','mp3','wav','ogg'];
 function mkBases(prefix){ const arr=[prefix, prefix.charAt(0).toUpperCase()+prefix.slice(1)]; for(let i=1;i<=20;i++){ arr.push(`${prefix}${i}`); arr.push(`${prefix.charAt(0).toUpperCase()+prefix.slice(1)}${i}`); } return Array.from(new Set(arr)); }
-function randomBase(bases, lastBase, lastCount){ let pick; do { pick = bases[Math.floor(Math.random()*bases.length)]; } while (lastCount>=2 && pick===lastBase && bases.length>1); return pick; }
-async function tryPlaySrc(url, vol){ try { const a = new Audio(url); a.preload='auto'; a.volume = vol; const p = a.play(); if (p && p.then) { await p; } return true; } catch { return false; } }
+function randomPick(arr, last, lastCount){ let p; do { p = arr[Math.floor(Math.random()*arr.length)]; } while (lastCount>=2 && p===last && arr.length>1); return p; }
+async function headOk(url){ try { const r = await fetch(url, { method: 'HEAD', cache: 'no-cache' }); return r.ok; } catch { return false; } }
 
-let lastEatBase = '', lastEatCount = 0;
-let lastCrashBase = '', lastCrashCount = 0;
+let EAT_URLS = [], CRASH_URLS = [];
+(async function discover(){
+	const eatBases = mkBases('eat');
+	const crashBases = mkBases('crash');
+	const eatPromises = [];
+	for (const b of eatBases) for (const e of exts) eatPromises.push((async()=>{ const u=`${b}.${e}`; if (await headOk(u)) EAT_URLS.push(u); })());
+	const crashPromises = [];
+	for (const b of crashBases) for (const e of exts) crashPromises.push((async()=>{ const u=`${b}.${e}`; if (await headOk(u)) CRASH_URLS.push(u); })());
+	await Promise.all([...eatPromises, ...crashPromises]);
+	// Deduplicate while preserving order
+	EAT_URLS = Array.from(new Set(EAT_URLS));
+	CRASH_URLS = Array.from(new Set(CRASH_URLS));
+})();
+
+let lastEatUrl = '', lastEatCount = 0;
+let lastCrashUrl = '', lastCrashCount = 0;
 
 async function playEat(){
 	resumeAudioContext();
-	const bases = mkBases('eat');
-	const base = randomBase(bases, lastEatBase, lastEatCount);
-	if (base===lastEatBase) lastEatCount++; else { lastEatBase = base; lastEatCount = 1; }
-	let ok = false;
-	for (const ext of exts){ if (await tryPlaySrc(`${base}.${ext}`, 1.0)) { ok = true; break; } }
-	if (!ok && eatSound && eatSound.src) ok = await tryPlaySrc(eatSound.src, 1.0);
+	let url;
+	if (EAT_URLS.length) { url = randomPick(EAT_URLS, lastEatUrl, lastEatCount); }
+	if (!url) { // fallback to first that exists by trial
+		const bases = mkBases('eat');
+		for (const b of bases) { for (const e of exts) { const u=`${b}.${e}`; if (await headOk(u)) { url=u; break; } } if (url) break; }
+	}
+	if (url) {
+		if (url===lastEatUrl) lastEatCount++; else { lastEatUrl = url; lastEatCount = 1; }
+		try { const a = new Audio(url); a.volume=1.0; a.play().catch(()=>{}); } catch {}
+	}
 	beep(880, 0.06, 0.03);
 }
 
 async function playCrash(){
 	resumeAudioContext();
-	const bases = mkBases('crash');
-	const base = randomBase(bases, lastCrashBase, lastCrashCount);
-	if (base===lastCrashBase) lastCrashCount++; else { lastCrashBase = base; lastCrashCount = 1; }
-	let ok = false;
-	for (const ext of exts){ if (await tryPlaySrc(`${base}.${ext}`, 1.0)) { ok = true; break; } }
-	if (!ok && crashSound && crashSound.src) ok = await tryPlaySrc(crashSound.src, 1.0);
+	let url;
+	if (CRASH_URLS.length) { url = randomPick(CRASH_URLS, lastCrashUrl, lastCrashCount); }
+	if (!url) {
+		const bases = mkBases('crash');
+		for (const b of bases) { for (const e of exts) { const u=`${b}.${e}`; if (await headOk(u)) { url=u; break; } } if (url) break; }
+	}
+	if (url) {
+		if (url===lastCrashUrl) lastCrashCount++; else { lastCrashUrl = url; lastCrashCount = 1; }
+		try { const a = new Audio(url); a.volume=1.0; a.play().catch(()=>{}); } catch {}
+	}
 	beep(180, 0.18, 0.04);
 }
 
