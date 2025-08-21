@@ -117,42 +117,39 @@ function gameOver() {
 
 restartBtn.addEventListener('click', () => { resumeAudioContext(); if (isDead && Date.now() >= restartUnlockAt) initGame(); });
 
-// ---------- Sound helpers & SFX pools ----------
+// ---------- Sound helpers ----------
 let audioCtx;
 function resumeAudioContext(){ try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); } catch {} }
 function beep(freq = 640, dur = 0.08, gainValue = 0.08) { resumeAudioContext(); if (!audioCtx) return; const o = audioCtx.createOscillator(); const g = audioCtx.createGain(); const now = audioCtx.currentTime; o.type = 'square'; o.frequency.setValueAtTime(freq, now); g.gain.setValueAtTime(0.0001, now); g.gain.exponentialRampToValueAtTime(gainValue, now + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, now + dur); o.connect(g); g.connect(audioCtx.destination); o.start(now); o.stop(now + dur); }
-function tryPlay(el, vol = 0.95){ return new Promise(resolve => { try { if (!el) return resolve(false); const a = el.cloneNode(true); a.currentTime = 0; a.volume = vol; const p = a.play(); if (p && p.then) { p.then(()=>resolve(true)).catch(()=>resolve(false)); } else { resolve(true); } } catch { resolve(false); } }); }
 
-// Helpers to create pools from base names + extensions
-function buildBases(prefix){ const arr=[prefix]; for(let i=1;i<=20;i++) arr.push(`${prefix}${i}`); return arr; }
-function buildSources(baseNames) { const exts = ['m4a','mp3','wav','ogg']; const list = []; for (const base of baseNames) { for (const ext of exts) list.push(`./sfx/${base}.${ext}`); } return list; }
-async function buildPool(sources){ const pool=[]; await Promise.all(sources.map(src=>new Promise(res=>{ const a=new Audio(); a.preload='auto'; a.src=src; const done=ok=>{ a.oncanplaythrough=a.onloadeddata=a.onerror=null; if(ok) pool.push(a); res(); }; a.oncanplaythrough=()=>done(true); a.onloadeddata=()=>done(true); a.onerror=()=>done(false); // fallback timeout
- setTimeout(()=>done(a.readyState>0),1200); }))); return pool; }
+const exts = ['m4a','mp3','wav','ogg'];
+function mkBases(prefix){ const arr=[prefix]; for(let i=1;i<=20;i++) arr.push(`${prefix}${i}`); return arr; }
+function randomBase(bases, lastBase, lastCount){ let pick; do { pick = bases[Math.floor(Math.random()*bases.length)]; } while (lastCount>=2 && pick===lastBase && bases.length>1); return pick; }
+async function tryPlaySrc(url, vol){ try { const a = new Audio(url); a.preload='auto'; a.volume = vol; const p = a.play(); if (p && p.then) { await p; } return true; } catch { return false; } }
 
-// Build SFX pools (eat/crash)
-const EAT_BASES = buildBases('eat');
-const CRASH_BASES = buildBases('crash');
-let eatPool = [], crashPool = [];
-(async function preloadSfx(){ eatPool = await buildPool(buildSources(EAT_BASES)); crashPool = await buildPool(buildSources(CRASH_BASES)); })();
-
-let lastEatIdx = -1, lastEatCount = 0;
-let lastCrashIdx = -1, lastCrashCount = 0;
-function pickIdx(poolLen, lastIdx, lastCount){ let idx; do { idx = Math.floor(Math.random()*Math.max(1,poolLen)); } while (poolLen > 1 && lastCount >= 2 && idx === lastIdx); return idx; }
+let lastEatBase = '', lastEatCount = 0;
+let lastCrashBase = '', lastCrashCount = 0;
 
 async function playEat(){
 	resumeAudioContext();
-	let ok=false;
-	if (eatPool.length){ const idx = pickIdx(eatPool.length, lastEatIdx, lastEatCount); if (idx === lastEatIdx) lastEatCount++; else { lastEatIdx = idx; lastEatCount = 1; } ok = await tryPlay(eatPool[idx], 1.0); }
-	if (!ok && eatSound && eatSound.src) ok = await tryPlay(eatSound, 1.0);
-	beep(880, 0.06, 0.03); // always layer a soft retro beep
+	const bases = mkBases('eat');
+	const base = randomBase(bases, lastEatBase, lastEatCount);
+	if (base===lastEatBase) lastEatCount++; else { lastEatBase = base; lastEatCount = 1; }
+	let ok = false;
+	for (const ext of exts){ if (await tryPlaySrc(`${base}.${ext}`, 1.0)) { ok = true; break; } }
+	if (!ok && eatSound && eatSound.src) ok = await tryPlaySrc(eatSound.src, 1.0);
+	beep(880, 0.06, 0.03);
 }
 
 async function playCrash(){
 	resumeAudioContext();
-	let ok=false;
-	if (crashPool.length){ const idx = pickIdx(crashPool.length, lastCrashIdx, lastCrashCount); if (idx === lastCrashIdx) lastCrashCount++; else { lastCrashIdx = idx; lastCrashCount = 1; } ok = await tryPlay(crashPool[idx], 1.0); }
-	if (!ok && crashSound && crashSound.src) ok = await tryPlay(crashSound, 1.0);
-	beep(180, 0.18, 0.04); // subtle retro layer
+	const bases = mkBases('crash');
+	const base = randomBase(bases, lastCrashBase, lastCrashCount);
+	if (base===lastCrashBase) lastCrashCount++; else { lastCrashBase = base; lastCrashCount = 1; }
+	let ok = false;
+	for (const ext of exts){ if (await tryPlaySrc(`${base}.${ext}`, 1.0)) { ok = true; break; } }
+	if (!ok && crashSound && crashSound.src) ok = await tryPlaySrc(crashSound.src, 1.0);
+	beep(180, 0.18, 0.04);
 }
 
 function flashEat(){ if (!wrapEl) return; wrapEl.classList.remove('eat-flash'); void wrapEl.offsetWidth; wrapEl.classList.add('eat-flash'); setTimeout(()=>wrapEl.classList.remove('eat-flash'), 500); }
