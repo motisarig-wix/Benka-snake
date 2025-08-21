@@ -123,7 +123,7 @@ function resumeAudioContext(){ try { audioCtx = audioCtx || new (window.AudioCon
 function beep(freq = 640, dur = 0.08, gainValue = 0.08) { resumeAudioContext(); if (!audioCtx) return; const o = audioCtx.createOscillator(); const g = audioCtx.createGain(); const now = audioCtx.currentTime; o.type = 'square'; o.frequency.setValueAtTime(freq, now); g.gain.setValueAtTime(0.0001, now); g.gain.exponentialRampToValueAtTime(gainValue, now + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, now + dur); o.connect(g); g.connect(audioCtx.destination); o.start(now); o.stop(now + dur); }
 
 const exts = ['m4a','mp3','wav','ogg'];
-function mkBases(prefix){ const arr=[prefix]; for(let i=1;i<=20;i++) arr.push(`${prefix}${i}`); return arr; }
+function mkBases(prefix){ const arr=[prefix, prefix.charAt(0).toUpperCase()+prefix.slice(1)]; for(let i=1;i<=20;i++){ arr.push(`${prefix}${i}`); arr.push(`${prefix.charAt(0).toUpperCase()+prefix.slice(1)}${i}`); } return Array.from(new Set(arr)); }
 function randomBase(bases, lastBase, lastCount){ let pick; do { pick = bases[Math.floor(Math.random()*bases.length)]; } while (lastCount>=2 && pick===lastBase && bases.length>1); return pick; }
 async function tryPlaySrc(url, vol){ try { const a = new Audio(url); a.preload='auto'; a.volume = vol; const p = a.play(); if (p && p.then) { await p; } return true; } catch { return false; } }
 
